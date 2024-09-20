@@ -1,0 +1,8 @@
+*__debug*
+.manifest.json
+.restore
+original-tree
+home-tree
+
+# VSCODE
+.vscode
