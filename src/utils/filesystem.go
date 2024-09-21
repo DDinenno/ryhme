@@ -150,6 +150,7 @@ func CreateFile(filePath string, content string) {
 	parts := strings.Split(filePath, "/")
 	dir :=  strings.Join( parts[0:len(parts) - 1], "/") 
 
+	
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		fmt.Println("Error creating directories:", err)
@@ -227,6 +228,15 @@ func ReadJSON[T any](filePath string, defaultValue T) T {
 }
 
 func WriteJSON[T any](filePath string, data T) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Panicf("Error serializing to JSON: %v", err)
+	}
+
+	CreateFile(filePath, string(jsonData))
+}
+
+func WriteJSONPretty[T any](filePath string, data T) {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		log.Panicf("Error serializing to JSON: %v", err)

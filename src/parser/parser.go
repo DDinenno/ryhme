@@ -10,17 +10,26 @@ import (
 	"strings"
 )
 
+var (
+	openingBracket = "{{"
+	closingBracket = "}}"
+	indent = "    "
+	lineEndingsRegexp = regexp.MustCompile("\r\n|\n")
+)
 
-func Parse(fileString string) types.Manifest {
+func Parse(fileString string) types.Config {
 	currentLine := 0
-	files := []types.Config{}
+	files := []types.ConfigFile{}
 	var message = "Did some stuff"
-	var currentFile types.Config
+	var currentFile types.ConfigFile
 	var packages = []types.Package{}
 
 
 	filepathRegex := regexp.MustCompile(`^[a-zA-Z0-9_\-/\\.\~]+(\.[a-zA-Z0-9]+)?`)
-	doesntStartWithStringRegex := regexp.MustCompile(`^[^\s].*`)
+	// doesntStartWithStringRegex := regexp.MustCompile(`^[^\s].*`)
+	openingBracketRegex := regexp.MustCompile("^" + openingBracket + "(\\s+|)$")
+	closingBracketRegex := regexp.MustCompile("^" + closingBracket + "(\\s+|)$")
+
 	packageStartingRegexStr := `^[a-zA-Z]+ = \[`
 	packageStartingRegex := regexp.MustCompile(packageStartingRegexStr)
 	commentedLineRegex := regexp.MustCompile(`^#`)
@@ -55,7 +64,7 @@ func Parse(fileString string) types.Manifest {
 				if  filepathRegex.MatchString(line) {
 					status = types.BUILDING_CONFIG
 
-					currentFile = types.Config{
+					currentFile = types.ConfigFile{
 						FilePath: "",
 						MergeType: "append",
 						Start: -1,
@@ -66,7 +75,7 @@ func Parse(fileString string) types.Manifest {
 					splitParams := strings.Split(line, " ")	
 					currentFile.FilePath = splitParams[0]
 
-					_, duplicateFile := array.Find(files, func (c types.Config) bool {
+					_, duplicateFile := array.Find(files, func (c types.ConfigFile) bool {
 						return c.FilePath == currentFile.FilePath
 					})
 
@@ -120,21 +129,21 @@ func Parse(fileString string) types.Manifest {
 			}
 		} else if status == types.BUILDING_CONFIG {
 			if (currentFile.Start == -1) {
-				if(strings.TrimRight(line, " ") == "{") {
+				if(openingBracketRegex.MatchString(openingBracket)) {
 					currentFile.Start = i
 					
 				} else {
-					log.Panicf("Expected '{' (opening bracket)")
+					log.Panicf("Expected '" + openingBracket + "'")
 				}
 	
 	
 			} else if (currentFile.End == -1) {
-				if(strings.TrimRight(line, " ") == "}") {
+				if(closingBracketRegex.MatchString(line)) {
 					currentFile.End = i
 					files = append(files, currentFile)
 	
 					// create new config
-					currentFile = types.Config{
+					currentFile = types.ConfigFile{
 						FilePath: "",
 						MergeType: "append",
 						Start: -1,
@@ -144,9 +153,6 @@ func Parse(fileString string) types.Manifest {
 
 					status = types.SCANNING
 				} else {
-					if (doesntStartWithStringRegex.MatchString(line)  &&  strings.TrimRight(line, " ") != "}"  ) {
-						log.Panicf("Expected '}' (closing bracket)")
-					}		
 					line = strings.TrimPrefix(line, "    ")
 					line = (line + "\n") 
 					currentFile.Body += line
@@ -155,20 +161,68 @@ func Parse(fileString string) types.Manifest {
 		}
 	}
 
-	return types.Manifest{
+	return types.Config{
 		Message: message,
 		Files: files,
 		Packages: packages,
 	}
 }
 
+func BuildConfigString(config types.Config) string {
+	configString := ""
 
-func DiffFiles(old []types.Config, new []types.Config) ([]types.DiffType, []types.Config) {
+	for _, file := range config.Files {
+		// fmt.Println("Index:", index, "Value:", value)
+
+		// configString +=	value.Body + "\n"
+
+
+
+		lines := lineEndingsRegexp.Split(file.Body, -1)
+
+		configString += file.FilePath 
+		if (file.MergeType == "append") {
+			configString += " " + "-a\n"
+		} else if (file.MergeType == "replace") {
+			configString += " " + "-r\n"
+		} else {
+			configString += "\n"
+		}
+
+		configString += openingBracket + "\n"
+	
+		for _, line := range lines {
+			configString += indent + line + "\n"
+		}
+
+		configString += closingBracket + "\n\n"
+
+	}
+
+	if (len(config.Packages) > 0) {
+		configString += "packages = [\n"
+
+		for _, value := range config.Packages {
+			configString += indent + value.Name 
+
+			if(value.Version != "any") {
+				configString +=  value.Version + "\n"
+			}
+			configString += "\n"
+		}
+
+		configString += "]"
+	}
+
+	return configString
+}
+
+func DiffFiles(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType, []types.ConfigFile) {
 	var diffed []types.DiffType
-	var configs []types.Config
+	var configs []types.ConfigFile
 
 	for _, config := range old {
-		matched, found := array.Find(new, func (c types.Config) bool {
+		matched, found := array.Find(new, func (c types.ConfigFile) bool {
 			return c.FilePath == config.FilePath
 		})
 
@@ -179,13 +233,13 @@ func DiffFiles(old []types.Config, new []types.Config) ([]types.DiffType, []type
 		} else if (matched.Body != config.Body)  {
 			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_MODIFY }
 			diffed = append(diffed, entry)
-			configs = append(configs, config)
+			configs = append(configs, matched)
 		}
 	}
 
 	// Find elements in new not in old
 	for _, config := range new {
-		_, found := array.Find(old, func (c types.Config) bool {
+		_, found := array.Find(old, func (c types.ConfigFile) bool {
 			return c.FilePath == config.FilePath
 		})
 
@@ -199,12 +253,12 @@ func DiffFiles(old []types.Config, new []types.Config) ([]types.DiffType, []type
 	return diffed, configs
 }
 
-func DiffPackages(old []types.Config, new []types.Config) ([]types.DiffType, []types.Config) {
+func DiffPackages(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType, []types.ConfigFile) {
 	var diffed []types.DiffType
-	var configs []types.Config
+	var configs []types.ConfigFile
 
 	for _, config := range old {
-		matched, found := array.Find(new, func (c types.Config) bool {
+		matched, found := array.Find(new, func (c types.ConfigFile) bool {
 			return c.FilePath == config.FilePath
 		})
 
@@ -221,7 +275,7 @@ func DiffPackages(old []types.Config, new []types.Config) ([]types.DiffType, []t
 
 	// Find elements in new not in old
 	for _, config := range new {
-		_, found := array.Find(old, func (c types.Config) bool {
+		_, found := array.Find(old, func (c types.ConfigFile) bool {
 			return c.FilePath == config.FilePath
 		})
 

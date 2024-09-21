@@ -1,18 +1,5 @@
 package types
 
-type OriginalConfig struct {
-	FilePath string
-	Body  string
-}
-
-type Config struct {
-	FilePath string
-	Start int
-	End int
-	MergeType string
-	Body  string
-}
-
 type Status int
 
 const (
@@ -38,13 +25,23 @@ type Package struct {
 	Version string
 }
 
-type Manifest struct {
+type ConfigFile struct {
+	FilePath string
+	Start int
+	End int
+	MergeType string
+	Body  string
+}
+
+type Config struct {
 	Id string
 	Message string
-	Files []Config
+	Files []ConfigFile
 	Packages []Package
 	// flatpaks []Package
 }
+
+type History = []Config
 
 type DiffAction string
 
@@ -67,4 +64,8 @@ type DiffedConfig struct {
 type RestorePoint struct {
     Id   int
     Message string
+}
+
+type Manifest struct {
+	SelectedConfig string
 }

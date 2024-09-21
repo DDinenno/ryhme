@@ -2,14 +2,13 @@ package actions
 
 import (
 	"fmt"
-	"path/filepath"
+	"os"
 	"stash/src/constants"
 	"stash/src/parser"
 	"stash/src/types"
 	filesystem "stash/src/utils"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/google/uuid"
@@ -22,83 +21,67 @@ func PrintVersion() {
 	fmt.Println("Version: " + version)
 }
 
-func GetDefaultManifest() types.Manifest {
-	return types.Manifest{
+func GetHistory() types.History {
+	files := filesystem.ReadJSON[types.History](constants.HISTORY_PATH, types.History{})
+	return files
+}
+
+func GetManifest() types.Manifest {
+	files := filesystem.ReadJSON[types.Manifest](constants.MANIFEST_PATH, types.Manifest{})
+	return files
+}
+
+func GetDefaultConfig() types.Config {
+	return types.Config{
 		Id: "",
 		Message: "No message",
-		Files: []types.Config{},
+		Files: []types.ConfigFile{},
 		Packages: []types.Package{},
 	}
 
 }
 
-func GetRestoreList()  []string {
-	files := filesystem.ListFiles(constants.RESTORE_PATH)
-	var filePaths []string
-	
-	for i := 0; i < len(files); i++ {
-		filePaths[i] = filesystem.Filename(files[i].Path)
+func getLastConfig() (types.Config, bool) {
+	history := GetHistory() 
+
+	if len(history) == 0 {
+		return types.Config{}, false
 	}
 
-	// sort.Slice(files, func(i, j int) bool {
-    //     return natsort.Compare(files[i], files[j])
-    // })
-
-	return filePaths
+	return history[0], true
 }
 
-func GetLastRestoreIndex() int{
-	if !filesystem.FileExists(constants.RESTORE_PATH) {
-		return -1
+
+func getSelectedConfig() (types.Config, bool) {
+	history := GetHistory() 
+	manifest := GetManifest()
+
+	if len(history) == 0 {
+		return types.Config{}, false
 	}
 
-	files := GetRestoreList()
+	var config types.Config
+	var found bool = false
 
 
-	if len(files) == 0 {
-		return  -1
+	for _, c := range history {
+		if (manifest.SelectedConfig == c.Id) {
+			config = c
+			found = true
+			break
+		}
 	}
 
-
-	index := len(files) - 1
-	// latestFilename := files[index]
-	// lastestFilePath := filepath.Join(constants.RESTORE_PATH, latestFilename)
-
-	// defaultManifest := GetDefaultManifest()
-	// content := filesystem.ReadJSON[types.Manifest](lastestFilePath,defaultManifest)
-
-	// fmt.Println("last file", latestFilename)
-	return index
+	return config, found
 }
 
-func GetLastManifest() (types.Manifest, bool) {
-	if !filesystem.FileExists(constants.MANIFEST_PATH) {
-		return types.Manifest{}, false
-	}
-
-	manifest := filesystem.ReadJSON[types.Manifest](constants.MANIFEST_PATH, GetDefaultManifest())
-	return manifest, true
-
-	// files := filesystem.ListFiles(constants.RESTORE_PATH)
-	// if len(files) == 0 {
-	// 	return types.Manifest{}, false
-	// }
-
-	// latestFilePath := files[len(files) - 1]
-	// defaultManifest := GetDefaultManifest()
-	// content := filesystem.ReadJSON[types.Manifest](latestFilePath,defaultManifest)
-
-	// fmt.Println("last file", latestFilePath)
-	// return content, true
-}
-
-func Commit(Manifest types.Manifest) {
-	oldManifest := filesystem.ReadJSON[types.Manifest](constants.MANIFEST_PATH,GetDefaultManifest())
-	diffed, configs  := parser.DiffFiles(oldManifest.Files, Manifest.Files)
+func Commit(Config types.Config, pushHistory bool) {
+	oldConfig, _ := getSelectedConfig()
+	diffed, configs  := parser.DiffFiles(oldConfig.Files, Config.Files)
 
 	if len(diffed) == 0 {
 		fmt.Println("No file changes found.")
-		return
+		os.Exit(1)
 	}
 
 	for i := 0; i < len(diffed); i++ {
@@ -179,33 +162,32 @@ func Commit(Manifest types.Manifest) {
 	
 	}
 
-	_, foundPrevManifest := GetLastManifest()
-	Manifest.Id = uuid.New().String()
 
-	if(foundPrevManifest && filesystem.FileExists(constants.MANIFEST_PATH)) {
-		if(!filesystem.FileExists(constants.RESTORE_PATH)) {
-			filesystem.CreateFolder(constants.RESTORE_PATH)
-		}
-
-		timestamp := int(time.Now().Unix())
-		newPath := filepath.Join(constants.RESTORE_PATH, strconv.Itoa(timestamp)  + ".json")
-		filesystem.Move(constants.MANIFEST_PATH, newPath)
-		fmt.Println("Create restore point", newPath)
+	if pushHistory {
+		history := GetHistory()
+		Config.Id = uuid.New().String()
+		history = append([]types.Config{Config}, history... )
+	
+		filesystem.WriteJSON(constants.HISTORY_PATH, history)
 	}
 
-	filesystem.WriteJSON(constants.MANIFEST_PATH, Manifest)
+	manifest := GetManifest()
+
+	manifest.SelectedConfig = Config.Id
+	filesystem.WriteJSON(constants.MANIFEST_PATH, manifest)
 }
 
 func Apply() {
 	fileString := filesystem.ReadFile(constants.CONFIG_PATH)
-	Manifest := parser.Parse(fileString)
-	Commit(Manifest)
+	Config := parser.Parse(fileString)
+	Commit(Config, true)
 }
 
-func GetRestorePoints() {
-	files := filesystem.ListFiles(constants.RESTORE_PATH)
 
-	if len(files) == 0 {
+func PrintRestorePoints() {
+	history := GetHistory()
+
+	if len(history) == 0 {
 		fmt.Println("No return points found!")
 		return
 	}
@@ -217,29 +199,49 @@ func GetRestorePoints() {
 	headerFmt := color.New(color.FgHiMagenta, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgYellow).SprintfFunc()
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+	manifest := GetManifest()
 
-	for i := len(files) - 1; i >= 0; i-- {
-		file := files[i]
-		content := filesystem.ReadJSON[types.Manifest](file.Path, GetDefaultManifest())
-		tbl.AddRow(strconv.Itoa(i), content.Id, content.Message)
-		// tbl.AddRow(file.Path, content.Message)
+	for i := 0; i < len(history); i++ {
+		file := history[i]
+
+		var index string
+
+		if (manifest.SelectedConfig == file.Id) {
+			index = strconv.Itoa(i) + " (current)"
+		} else {
+			index = strconv.Itoa(i)
+		}
+
+		tbl.AddRow(index, file.Id, file.Message)
 	}
+
+	// for i := len(history) - 1; i >= 0; i-- {
+	// 	file := history[i]
+	// 	tbl.AddRow(strconv.Itoa(i), file.Id, file.Message)
+	// }
 
 	tbl.Print()
 }
 
+
+
+
 func Restore(index int) {
-	files := filesystem.ListFiles(constants.RESTORE_PATH)
+	history := GetHistory()
 
-	file := files[index]	
-	Manifest := filesystem.ReadJSON[types.Manifest](file.Path, GetDefaultManifest())
+	if (index < 0 || index > len(history) - 1) {
+		fmt.Println("Invalid Index " + strconv.Itoa(index) + "!")
+		return 
+	}
 
-	// replace restore point with current manifest
-	// apply
+	Config := history[index]	
 
-	Commit(Manifest)
+	fmt.Println("Restoring to index:", index)
+	Commit(Config, false)
 
-	fmt.Println("Not implemented")
+	configString := parser.BuildConfigString(Config)
+
+	filesystem.CreateFile(constants.CONFIG_PATH,configString)
 }
 
 func Revert() {

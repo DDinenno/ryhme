@@ -62,10 +62,8 @@ var restore = &cobra.Command{
 	Long:  "restores to a previous state",
 	Run: func(cmd *cobra.Command, args []string) {
     if restore_list {
-      actions.GetRestorePoints()
+      actions.PrintRestorePoints()
     } else {
-      fmt.Println(args, len(args))
-
       if len(args) == 0 {
         fmt.Println("No restore index param provided!")
         os.Exit(1)

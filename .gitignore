@@ -1,6 +1,7 @@
 *__debug*
 .manifest.json
-.restore
+.history.json
+.stashrc
 original-tree
 home-tree
 
