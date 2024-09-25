@@ -17,26 +17,30 @@ var (
 	lineEndingsRegexp = regexp.MustCompile("\r\n|\n")
 )
 
+func HandleParsingPackages(lines []string, startingLine int) () {
+
+}
+
 func Parse(fileString string) types.Config {
 	currentLine := 0
 	files := []types.ConfigFile{}
 	var message = "Did some stuff"
 	var currentFile types.ConfigFile
 	var packages = []types.Package{}
-
+	var flatpaks = []types.Package{}
 
 	filepathRegex := regexp.MustCompile(`^[a-zA-Z0-9_\-/\\.\~]+(\.[a-zA-Z0-9]+)?`)
-	// doesntStartWithStringRegex := regexp.MustCompile(`^[^\s].*`)
 	openingBracketRegex := regexp.MustCompile("^" + openingBracket + "(\\s+|)$")
 	closingBracketRegex := regexp.MustCompile("^" + closingBracket + "(\\s+|)$")
 
-	packageStartingRegexStr := `^[a-zA-Z]+ = \[`
+	packageStartingRegexStr := `^[a-zA-Z0-9]+ = \[`
 	packageStartingRegex := regexp.MustCompile(packageStartingRegexStr)
 	commentedLineRegex := regexp.MustCompile(`^#`)
 	
 	text := strings.ReplaceAll(fileString, "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 	status := types.SCANNING
+	var packageType types.PackageType
 
 	defer func() {
         if r := recover(); r != nil {
@@ -46,10 +50,10 @@ func Parse(fileString string) types.Config {
 			
         }
     }()
-	
+
 	for i := 0; i < len(lines); i++ {
 		currentLine = i
-		line := lines[i]
+		line := lines[currentLine]
 
 		if (strings.TrimSpace(line) == "" || commentedLineRegex.MatchString(line)) {
 			continue
@@ -59,6 +63,20 @@ func Parse(fileString string) types.Config {
 
 			if packageStartingRegex.MatchString(line) {
 				status = types.BUILDING_PACKAGE_LIST
+				fields := strings.Fields(line)
+				packageType = "unset"
+
+				for _, pType := range types.PackageTypes {
+					if (fields[0] == strings.ToLower(string(pType))) {
+						packageType = pType
+						break
+					}
+				}
+
+				if packageType == "unset" {
+					log.Panic("Package type ", fields[0], " doesn't exist!" )
+				}
+
 			} else if currentFile.FilePath == "" {
 				
 				if  filepathRegex.MatchString(line) {
@@ -80,7 +98,7 @@ func Parse(fileString string) types.Config {
 					})
 
 					if duplicateFile {
-						fmt.Println("Duplicate filename '" + currentFile.FilePath + "' at line:", i)
+						fmt.Println("Duplicate filename '" + currentFile.FilePath + "' at line:", currentLine)
 						os.Exit(1) // Use a non-zero exit code to indicate an error
 					}
 	
@@ -105,32 +123,55 @@ func Parse(fileString string) types.Config {
 			if(strings.TrimRight(line, " ") == "]") {
 				status = types.SCANNING
 			} else {
-				packageStr := strings.ReplaceAll(line, " ", "")
+				fields := strings.Fields(line)
+				version := "any"
 
-				if (commentedLineRegex.MatchString(packageStr)) {
+				if (fields[0] == "#") {
 					continue
 				}
 
-				sections := strings.Split(packageStr,":")
+				if (packageType == types.DEFAULT_PACKAGE) {
+					if len(fields) > 1 && fields[1] != ""{
+						version = fields[1]
+					}
+					
+					currentPackage := types.Package{
+						Name: fields[0],
+						Version: version,
+					}
+	
+					packages = append(packages, currentPackage)
+				} else if(packageType == types.FLATPAK_PACKAGE) {
+					var remote string = "flathub"
+					version = "any"
 
-				version := "any"
+					if len(fields) == 2{
+						remote = fields[1]
+					} else if len(fields) == 3 {
+						remote = fields[1]
+						version = fields[2]
+					}
+					
+					currentPackage := types.Package{
+						Name: fields[0],
+						Version: version,
+						Remote: remote,
+					}
 
-				if len(sections) > 1 && sections[1] != ""{
-					version = sections[1]
+
+
+					flatpaks = append(flatpaks, currentPackage)
+				} else {	
+					log.Panic("package type ", packageType, " not implemented!")
 				}
-				
 
-				currentPackage := types.Package{
-					Name: sections[0],
-					Version: version,
-				}
 
-				packages = append(packages, currentPackage)
+			
 			}
 		} else if status == types.BUILDING_CONFIG {
 			if (currentFile.Start == -1) {
 				if(openingBracketRegex.MatchString(openingBracket)) {
-					currentFile.Start = i
+					currentFile.Start = currentLine
 					
 				} else {
 					log.Panicf("Expected '" + openingBracket + "'")
@@ -139,7 +180,7 @@ func Parse(fileString string) types.Config {
 	
 			} else if (currentFile.End == -1) {
 				if(closingBracketRegex.MatchString(line)) {
-					currentFile.End = i
+					currentFile.End = currentLine
 					files = append(files, currentFile)
 	
 					// create new config
@@ -159,12 +200,15 @@ func Parse(fileString string) types.Config {
 				}
 			}
 		}
+
 	}
+
 
 	return types.Config{
 		Message: message,
 		Files: files,
 		Packages: packages,
+		Flatpaks: flatpaks,
 	}
 }
 
@@ -172,12 +216,6 @@ func BuildConfigString(config types.Config) string {
 	configString := ""
 
 	for _, file := range config.Files {
-		// fmt.Println("Index:", index, "Value:", value)
-
-		// configString +=	value.Body + "\n"
-
-
-
 		lines := lineEndingsRegexp.Split(file.Body, -1)
 
 		configString += file.FilePath 
@@ -206,7 +244,7 @@ func BuildConfigString(config types.Config) string {
 			configString += indent + value.Name 
 
 			if(value.Version != "any") {
-				configString +=  value.Version + "\n"
+				configString += " " + value.Version + "\n"
 			}
 			configString += "\n"
 		}
@@ -217,8 +255,8 @@ func BuildConfigString(config types.Config) string {
 	return configString
 }
 
-func DiffFiles(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType, []types.ConfigFile) {
-	var diffed []types.DiffType
+func DiffFiles(old []types.ConfigFile, new []types.ConfigFile) ([]types.ConfigFile, []types.DiffAction) {
+	var diffed []types.DiffAction
 	var configs []types.ConfigFile
 
 	for _, config := range old {
@@ -227,12 +265,10 @@ func DiffFiles(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType
 		})
 
 		if !found {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_REMOVE }
-			diffed = append(diffed, entry)
+			diffed = append(diffed, types.DIFF_REMOVE)
 			configs = append(configs, config)
 		} else if (matched.Body != config.Body)  {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_MODIFY }
-			diffed = append(diffed, entry)
+			diffed = append(diffed, types.DIFF_MODIFY)
 			configs = append(configs, matched)
 		}
 	}
@@ -244,47 +280,52 @@ func DiffFiles(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType
 		})
 
 		if !found {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_CREATE }
-			diffed = append(diffed, entry)
+			diffed = append(diffed, types.DIFF_CREATE)
 			configs = append(configs, config)
 		} 
 	}
 
-	return diffed, configs
+	return configs, diffed
 }
 
-func DiffPackages(old []types.ConfigFile, new []types.ConfigFile) ([]types.DiffType, []types.ConfigFile) {
-	var diffed []types.DiffType
-	var configs []types.ConfigFile
+func DiffPackages(old []types.Package, new []types.Package) types.PackageDiff {
+	var created []types.Package
+	var updated []types.Package
+	var removed []types.Package
+	hasChanges := false
 
-	for _, config := range old {
-		matched, found := array.Find(new, func (c types.ConfigFile) bool {
-			return c.FilePath == config.FilePath
+
+	for _, pack := range old {
+		matched, found := array.Find(new, func (p types.Package) bool {
+			return p.Name == pack.Name
 		})
 
 		if !found {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_REMOVE }
-			diffed = append(diffed, entry)
-			configs = append(configs, config)
-		} else if (matched.Body != config.Body)  {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_MODIFY }
-			diffed = append(diffed, entry)
-			configs = append(configs, config)
+			removed = append(removed, pack)
+			hasChanges = true
+		} else if (matched.Version != pack.Version ||  matched.Remote != pack.Remote)  {
+			updated = append(updated, matched)
+			hasChanges = true
 		}
 	}
 
 	// Find elements in new not in old
-	for _, config := range new {
-		_, found := array.Find(old, func (c types.ConfigFile) bool {
-			return c.FilePath == config.FilePath
+	for _, pack := range new {
+		_, found := array.Find(old, func (p types.Package) bool {
+			return p.Name == pack.Name
 		})
 
 		if !found {
-			entry := types.DiffType{ Name: config.FilePath, Action: types.DIFF_CREATE }
-			diffed = append(diffed, entry)
-			configs = append(configs, config)
+			created = append(created, pack)
+			hasChanges = true
 		} 
 	}
 
-	return diffed, configs
+
+	return types.PackageDiff{
+		Created: created, 
+		Updated: updated,
+		Removed: removed,
+		HasChanges: hasChanges,
+	}
 }

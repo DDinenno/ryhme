@@ -12,17 +12,25 @@ type PackageType string
 
 
 const (
-	DEFAULT PackageType = "packages"
-    FLATPAK PackageType = "flatpacks"
-    SNAP PackageType = "snaps"
-    APP_IMAGE PackageType = "appimages"
+	DEFAULT_PACKAGE PackageType = "Packages"
+    FLATPAK_PACKAGE PackageType = "Flatpaks"
+    SNAP_PACKAGE PackageType = "Snaps"
+    APPIMAGE_PACKAGE PackageType = "Appimages"
 )
 
-var PackageTypes = []PackageType{DEFAULT, FLATPAK, SNAP, APP_IMAGE}
+var PackageTypes = []PackageType{DEFAULT_PACKAGE, FLATPAK_PACKAGE, SNAP_PACKAGE, APPIMAGE_PACKAGE}
 
 type Package struct {
 	Name string
 	Version string
+	Remote string
+}
+
+type PackageDiff struct {
+	Created []Package
+	Updated []Package 
+	Removed []Package
+	HasChanges bool 
 }
 
 type ConfigFile struct {
@@ -33,12 +41,22 @@ type ConfigFile struct {
 	Body  string
 }
 
+type Repository struct {
+	Name string
+	Url string
+}
+
+type FlatpakConfig struct {
+	Repos []Repository
+	Packages []Package
+}
+
 type Config struct {
 	Id string
 	Message string
 	Files []ConfigFile
 	Packages []Package
-	// flatpaks []Package
+	Flatpaks []Package
 }
 
 type History = []Config
