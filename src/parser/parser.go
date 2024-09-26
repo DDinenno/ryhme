@@ -84,7 +84,7 @@ func Parse(fileString string) types.Config {
 
 					currentFile = types.ConfigFile{
 						FilePath: "",
-						MergeType: "append",
+						MergeType: "default",
 						Start: -1,
 						End: -1,
 						Body: "",
@@ -142,7 +142,7 @@ func Parse(fileString string) types.Config {
 	
 					packages = append(packages, currentPackage)
 				} else if(packageType == types.FLATPAK_PACKAGE) {
-					var remote string = "flathub"
+					var remote string = ""
 					version = "any"
 
 					if len(fields) == 2{
@@ -158,15 +158,10 @@ func Parse(fileString string) types.Config {
 						Remote: remote,
 					}
 
-
-
 					flatpaks = append(flatpaks, currentPackage)
 				} else {	
 					log.Panic("package type ", packageType, " not implemented!")
 				}
-
-
-			
 			}
 		} else if status == types.BUILDING_CONFIG {
 			if (currentFile.Start == -1) {
@@ -177,7 +172,6 @@ func Parse(fileString string) types.Config {
 					log.Panicf("Expected '" + openingBracket + "'")
 				}
 	
-	
 			} else if (currentFile.End == -1) {
 				if(closingBracketRegex.MatchString(line)) {
 					currentFile.End = currentLine
@@ -186,7 +180,7 @@ func Parse(fileString string) types.Config {
 					// create new config
 					currentFile = types.ConfigFile{
 						FilePath: "",
-						MergeType: "append",
+						MergeType: "default",
 						Start: -1,
 						End: -1,
 						Body: "",
@@ -215,9 +209,13 @@ func Parse(fileString string) types.Config {
 func BuildConfigString(config types.Config) string {
 	configString := ""
 
-	for _, file := range config.Files {
+	for i, file := range config.Files {
 		lines := lineEndingsRegexp.Split(file.Body, -1)
 
+		if (i > 0) {
+			configString +=  "\n\n" 
+		}
+		
 		configString += file.FilePath 
 		if (file.MergeType == "append") {
 			configString += " " + "-a\n"
@@ -233,19 +231,39 @@ func BuildConfigString(config types.Config) string {
 			configString += indent + line + "\n"
 		}
 
-		configString += closingBracket + "\n\n"
+		configString += closingBracket
 
 	}
 
 	if (len(config.Packages) > 0) {
-		configString += "packages = [\n"
+		configString += "\n\n" + "packages = [\n"
 
 		for _, value := range config.Packages {
 			configString += indent + value.Name 
 
 			if(value.Version != "any") {
-				configString += " " + value.Version + "\n"
+				configString += " " + value.Version
 			}
+			configString += "\n"
+		}
+
+		configString += "]"
+	}
+
+	if(len(config.Flatpaks) > 0) {
+		configString += "\n\nflatpaks = [\n"
+
+		for _, value := range config.Flatpaks {
+			configString += indent + value.Name 
+
+			if(value.Remote != "") {
+				configString += " " + value.Remote
+			}
+
+			if(value.Version != "any") {
+				configString += " " + value.Version
+			}
+
 			configString += "\n"
 		}
 

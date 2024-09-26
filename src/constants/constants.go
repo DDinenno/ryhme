@@ -5,3 +5,6 @@ const HISTORY_PATH = "./.history.json"
 const RESOLVED_TREE_PATH = "./home-tree/"  
 const ORIGINAL_TREE_PATH =  "./original-tree/"  
 const CONFIG_PATH = "./.stashrc"
+const TEST_CONFIG_PATH = "./.testrc"
+
+const DEFAULT_MERGE_TYPE = "replace"

@@ -1,0 +1,71 @@
+~/.testrc -a
+{{
+    A
+    B
+    C
+    D
+    E
+    F
+    G
+    H
+    
+}}
+
+~/.testrc1 -r
+{{
+    alias test="testing1"
+    alias test="testing"
+    ss
+    alias test="testing"
+    
+}}
+
+~/.testrc2
+{{
+    alias test="testing1"
+    alias test="testing "
+    alias test="testing"
+    
+}}
+
+~/test/.something 
+{{
+    SomeConfig = test
+        SomeConfig = test
+            SomeConfig = test
+                SomeConfig = test
+    
+}}
+
+~/test/.something-else.sh
+{{
+    # SomeConfig = test
+        SomeConfig = test
+            SomeConfig = test
+                SomeConfig = test
+    
+}}
+
+~/test.json
+{{
+    {
+        "something": {
+            "test": "test2"
+        }
+    }
+    
+}}
+
+packages = [
+    neovim
+    bc
+    htop
+    xz
+    flatpak
+]
+
+flatpaks = [
+    com.google.Chrome flathub 129.0.6668.58-1
+    com.test.Something 32.42.55
+    com.test.SomethingElse
+]
