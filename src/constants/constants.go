@@ -1,10 +1,15 @@
 package constants
 
-const MANIFEST_PATH = "./.manifest.json"
-const HISTORY_PATH = "./.history.json"
-const RESOLVED_TREE_PATH = "./home-tree/"  
-const ORIGINAL_TREE_PATH =  "./original-tree/"  
-const CONFIG_PATH = "./.stashrc"
-const TEST_CONFIG_PATH = "./.testrc"
+var (
 
-const DEFAULT_MERGE_TYPE = "replace"
+	// PATHS
+	ROOT_PATH = ""
+
+	MANIFEST_PATH      = "./.manifest.json"
+	RESOLVED_TREE_PATH = "./home-tree"
+	ORIGINAL_TREE_PATH = "./original-tree"
+	CONFIG_PATH        = "./stash.conf"
+
+	// MISC
+	DEFAULT_MERGE_TYPE = "replace"
+)

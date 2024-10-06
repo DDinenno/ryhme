@@ -20,6 +20,19 @@ func GetAbsPath(path string) string {
 	return absolutePath
 }
 
+func ResolvePath(base string, paths ...string) string {
+	// Join the base and the additional path segments
+	fullPath := filepath.Join(append([]string{base}, paths...)...)
+
+	// Resolve it to an absolute path
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return absPath
+}
+
 func ReadFile(filePath string) string {
 	// Read the file content as a byte slice
 	content, err := os.ReadFile(filePath)
@@ -42,6 +55,25 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
+func DoesSymlinkExist(path string) bool {
+	// Use os.Lstat to check if the symlink or file exists
+	_, err := os.Lstat(path)
+
+	// Return false if the file or symlink does not exist
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	// Handle other types of errors (e.g., permission issues)
+	if err != nil {
+		fmt.Println("Error accessing file:", err)
+		return false
+	}
+
+	// If we reach this point, the file or symlink exists (even if broken)
+	return true
+}
+
 func RemoveFolderRecursively(folderPath string) error {
 	err := os.RemoveAll(folderPath)
 	if err != nil {
@@ -57,7 +89,6 @@ func Move(src, dst string) error {
 	}
 	return nil
 }
-
 
 func GetHomeDir() string {
 	homeDir, err := os.UserHomeDir()
@@ -87,14 +118,13 @@ func RemoveFile(path string) error {
 }
 
 func Filename(path string) string {
-    return filepath.Base(path)
+	return filepath.Base(path)
 }
 
-
 func FilenameWithoutExt(path string) string {
-    filename := filepath.Base(path)
-    ext := filepath.Ext(filename)
-    return strings.TrimSuffix(filename, ext)
+	filename := filepath.Base(path)
+	ext := filepath.Ext(filename)
+	return strings.TrimSuffix(filename, ext)
 }
 
 type FileInfo struct {
@@ -106,7 +136,7 @@ func ListFiles(dirPath string) []FileInfo {
 	files := []FileInfo{}
 
 	dir, filePathErr := filepath.Abs(dirPath)
-	if (filePathErr != nil) {
+	if filePathErr != nil {
 		return files
 	}
 
@@ -138,19 +168,17 @@ func ListFiles(dirPath string) []FileInfo {
 }
 
 func CreateFolder(dirPath string) error {
-    err := os.MkdirAll(dirPath, 0755)
-    if err != nil {
-        return err
-    }
-    return nil
+	err := os.MkdirAll(dirPath, 0755)
+	if err != nil {
+		return err
+	}
+	return nil
 }
-
 
 func CreateFile(filePath string, content string) {
 	parts := strings.Split(filePath, "/")
-	dir :=  strings.Join( parts[0:len(parts) - 1], "/") 
+	dir := strings.Join(parts[0:len(parts)-1], "/")
 
-	
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		fmt.Println("Error creating directories:", err)
@@ -187,14 +215,13 @@ func CreateSymlink(src string, dest string) error {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	if(FileExists(dest)) {
-		fmt.Println("Deleting existing file at: ",dest)
+	if FileExists(dest) {
+		fmt.Println("Deleting existing file at: ", dest)
 		RemoveFile(dest)
 	}
 
 	fmt.Println("Creating symlink From: ", src, " To:", dest)
 	fmt.Println(destDir)
-
 
 	// Create the symbolic link
 	err = os.Symlink(GetAbsPath(src), GetAbsPath(dest))
@@ -215,7 +242,6 @@ func ReadJSON[T any](filePath string, defaultValue T) T {
 		// log.Panicf("Failed to read the file: %v", err)
 		return defaultValue
 	}
-
 
 	var v T
 	unmarshallErr := json.Unmarshal([]byte(content), &v)
@@ -244,4 +270,3 @@ func WriteJSONPretty[T any](filePath string, data T) {
 
 	CreateFile(filePath, string(jsonData))
 }
-

@@ -1,9 +1,14 @@
 *__debug*
 .manifest.json
-.history.json
-.stashrc
+.test-filesystem
 original-tree
 home-tree
+
+# Config
+stash.conf
+
+# Test
+test/mock-filesystem
 
 # VSCODE
 .vscode
